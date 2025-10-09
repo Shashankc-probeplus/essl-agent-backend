@@ -1,0 +1,23 @@
+version: "3.7"
+services:
+  essl_agent:
+    build: .
+    image: essl_agent:latest
+    container_name: essl_agent
+    restart: unless-stopped
+    ports:
+      - "8100:8100"
+    networks:
+      - keycloak_net
+      - mongo_net
+    env_file:
+      - ~/.env
+    volumes:
+      - ~/data.json:/data.json
+    stop_grace_period: 30s
+
+networks:
+  keycloak_net:
+    external: true
+  mongo_net:
+    external: true

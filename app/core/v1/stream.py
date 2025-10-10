@@ -91,6 +91,8 @@ class MultiDeviceStreamCoordinator:
             # Create stream manager for this device
             stream_manager = StreamManager(
                 device_ip=device_info.device_ip,
+                port=device_info.port,
+                password=device_info.password,
                 device_id=device_id,
                 server_url=self.server_url,
                 server_endpoint=self.server_endpoint,
@@ -101,7 +103,7 @@ class MultiDeviceStreamCoordinator:
             result = stream_manager.start()
             
             if result["success"]:
-                self.stream_managers[device_id] = stream_manager
+                stream_manager.stre[device_id] = stream_manager
                 print(f"✅ Started streaming for device: {device_id}")
             
             return result

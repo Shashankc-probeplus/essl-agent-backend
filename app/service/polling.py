@@ -29,7 +29,7 @@ class PollingService:
         self,
         device_pool: DevicePoolManager,
         mac_adress: Optional[str] = None,
-        poll_interval: int = 10,
+        poll_interval: int = 5,
     ):
         """
         Initialize polling service.

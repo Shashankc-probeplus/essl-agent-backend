@@ -19,8 +19,7 @@ import os
 
 from app.core.v1.essl import ESSLDeviceCore, DeviceError
 from app.core.v1.config import config
-
-
+from app.core.v1.stream_manager import StreamManager
 IST = timezone(timedelta(hours=5, minutes=30))
 
 DEFAULT_PORT = 4370
@@ -55,6 +54,7 @@ class DeviceInfo:
             "device_ip": self.device_ip,
             "port": self.port,
             "name": self.name,
+            "password": self.password,
             "location": self.location,
             "is_active": self.is_active,
             "last_seen": self.last_seen
@@ -149,7 +149,19 @@ class DevicePoolManager:
             self._save_devices()
             
             print(f"✅ Registered device: {device_id} ({device_ip}:{actual_port})")
+
+            stream_manager = StreamManager(
+                device_ip=device_info.device_ip,
+                port=device_info.port,
+                password=device_info.password,
+                device_id=device_id,
+                server_url=config.server_url,
+                server_endpoint="/api/v1/events/attendance",
+                initial_sync_hours=24
+            )
+            stream_manager.start()
             
+        
             return {
                 "success": True,
                 "message": f"Device {device_id} registered successfully",

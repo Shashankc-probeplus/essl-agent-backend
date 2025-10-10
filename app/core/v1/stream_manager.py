@@ -70,6 +70,8 @@ class StreamManager:
         device_ip: str,
         device_id: str,
         server_url: str,
+        port: int = 4370,
+        password: int = 0,
         server_endpoint: str = "/events/attendance",
         initial_sync_hours: int = 24
     ):
@@ -90,7 +92,7 @@ class StreamManager:
         self.initial_sync_hours = initial_sync_hours
         
         # Device core instance
-        self.device = ESSLDeviceCore(device_ip)
+        self.device = ESSLDeviceCore(device_ip, password=password, port=port)
         
         # State management
         self.mode = StreamMode.INITIALIZING

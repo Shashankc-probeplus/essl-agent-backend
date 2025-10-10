@@ -103,7 +103,7 @@ class MultiDeviceStreamCoordinator:
             result = stream_manager.start()
             
             if result["success"]:
-                stream_manager.stre[device_id] = stream_manager
+                self.stream_managers[device_id] = stream_manager
                 print(f"✅ Started streaming for device: {device_id}")
             
             return result

@@ -16,15 +16,12 @@ jobs:
         include:
           - os: ubuntu-latest
             output_name: essl-agent-linux
-            artifact_name: essl-agent-linux.zip
           
           - os: windows-latest
             output_name: essl-agent-windows
-            artifact_name: essl-agent-windows.zip
           
           - os: macos-latest
             output_name: essl-agent-macos
-            artifact_name: essl-agent-macos.zip
     
     runs-on: ${{ matrix.os }}
     
@@ -47,25 +44,23 @@ jobs:
         run: |
           python -m PyInstaller essl-agent.spec --clean
       
-      - name: Prepare distribution (Unix)
+      - name: Rename output folder
+        shell: bash
+        run: |
+          mv dist/essl-agent dist/${{ matrix.output_name }}
+      
+      - name: Upload artifact (Unix)
         if: runner.os != 'Windows'
-        run: |
-          mkdir -p release
-          cp -r dist/essl-agent release/${{ matrix.output_name }}
-          cd release
-          zip -r ${{ matrix.artifact_name }} ${{ matrix.output_name }}
-      
-      - name: Prepare distribution (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          mkdir release
-          xcopy dist\essl-agent release\${{ matrix.output_name }}\ /E /I /Y
-          cd release
-          powershell Compress-Archive -Path ${{ matrix.output_name }} -DestinationPath ${{ matrix.artifact_name }}
-      
-      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.output_name }}
-          path: release/${{ matrix.artifact_name }}
+          path: dist/${{ matrix.output_name }}
+          retention-days: 30
+      
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.output_name }}
+          path: dist/${{ matrix.output_name }}
           retention-days: 30

@@ -1,0 +1,55 @@
+# =============================================================================
+# Docker Build File for ESSL Agent Backend Executable
+# =============================================================================
+# This Dockerfile creates a container that can build Linux executables
+# even if your host Python doesn't have shared libraries
+#
+# Usage:
+#   docker build -f Dockerfile.build -t essl-builder .
+#   docker run --rm -v $(pwd)/dist:/app/dist essl-builder
+# =============================================================================
+
+FROM python:3.12-slim
+
+# Install system dependencies required by PyInstaller
+# - binutils: Provides objdump (required for analyzing binaries)
+# - build-essential: C compiler and tools (for some Python packages)
+# - upx: Executable compressor (optional, reduces size)
+RUN apt-get update && apt-get install -y \
+    binutils \
+    build-essential \
+    upx \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first (better Docker layer caching)
+# If requirements.txt doesn't change, this layer is cached
+COPY requirements.txt /app/
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install PyInstaller
+RUN pip install --no-cache-dir pyinstaller
+
+# Copy the rest of the application
+COPY . /app
+
+# Default command: build the executable
+CMD ["python", "-m", "PyInstaller", "essl-agent.spec", "--clean"]
+
+# =============================================================================
+# Build Instructions:
+# 
+# 1. Build the Docker image:
+#    docker build -f Dockerfile.build -t essl-builder .
+#
+# 2. Run the build (output to dist/):
+#    docker run --rm -v $(pwd)/dist:/app/dist essl-builder
+#
+# 3. Check the output:
+#    ls -lh dist/essl-agent/
+#
+# =============================================================================

@@ -60,3 +60,29 @@ linenv/
 files/
 profiling_logs/
 data.json
+
+# Build artifacts
+dist/
+build/
+*.spec.backup
+__pycache__/
+*.pyc
+*.pyo
+
+# Customer packages
+packages/
+
+# Environment
+.env
+*.env
+!.env.template
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

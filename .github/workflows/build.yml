@@ -1,66 +1,335 @@
-name: Build Executables
+name: Build Executables - All Platforms
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
+  release:
+    types: [created]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version number (e.g., 1.0.0)"
+        required: false
+        default: "1.0.0"
+
+env:
+  PYTHON_VERSION: "3.12"
 
 jobs:
-  build:
-    name: Build on ${{ matrix.os }}
-    
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            output_name: essl-agent-linux
-          
-          - os: windows-latest
-            output_name: essl-agent-windows
-          
-          - os: macos-latest
-            output_name: essl-agent-macos
-    
-    runs-on: ${{ matrix.os }}
-    
+  # ==========================================================================
+  # Linux Build - Creates both executable and .deb package
+  # ==========================================================================
+  build-linux:
+    name: Build Linux (.deb + executable)
+    runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils upx-ucl dpkg-dev
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Obfuscate source code (optional)
+        run: |
+          # Option 1: Use PyArmor for better protection
+          # pip install pyarmor
+          # pyarmor gen -O obf_app -r app/
+          # sed -i "s|('app', 'app')|('obf_app', 'app')|g" essl-agent.spec
+
+          # Option 2: Just use bytecode compilation (built into PyInstaller)
+          echo "Using PyInstaller bytecode compilation"
+
+      - name: Build executable
+        run: |
+          python -m PyInstaller essl-agent.spec --clean
+
+      - name: Strip debug symbols (reduce size + harder to reverse)
+        run: |
+          strip dist/essl-agent/essl-agent || true
+
+      - name: Create .deb package structure
+        run: |
+          VERSION="${{ github.event.inputs.version || '1.0.0' }}"
+          PACKAGE_NAME="essl-agent"
+          DEB_DIR="deb_build/${PACKAGE_NAME}_${VERSION}"
+
+          mkdir -p "${DEB_DIR}/DEBIAN"
+          mkdir -p "${DEB_DIR}/opt/${PACKAGE_NAME}"
+          mkdir -p "${DEB_DIR}/etc/${PACKAGE_NAME}"
+          mkdir -p "${DEB_DIR}/lib/systemd/system"
+          mkdir -p "${DEB_DIR}/usr/share/doc/${PACKAGE_NAME}"
+
+          # Copy application
+          cp -r dist/essl-agent/* "${DEB_DIR}/opt/${PACKAGE_NAME}/"
+
+          # Create config template
+          cat > "${DEB_DIR}/etc/${PACKAGE_NAME}/config.env" << 'EOF'
+          # ESSL Agent Configuration
+          # Edit this file to configure your agent
+
+          SERVER_URL=http://your-server-url.com
+          AGENT_ID=your-agent-id
+
+          # Optional settings
+          # HOST=0.0.0.0
+          # PORT=8000
+          EOF
+
+          # Create control file
+          cat > "${DEB_DIR}/DEBIAN/control" << EOF
+          Package: ${PACKAGE_NAME}
+          Version: ${VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Your Company <support@yourcompany.com>
+          Description: ESSL Agent - Biometric Device Management
+           Agent software for managing ESSL biometric devices.
+           Configure via /etc/${PACKAGE_NAME}/config.env
+          EOF
+
+          # Create postinst script
+          cat > "${DEB_DIR}/DEBIAN/postinst" << 'POSTINST'
+          #!/bin/bash
+          set -e
+
+          PACKAGE_NAME="essl-agent"
+          CONFIG_FILE="/etc/${PACKAGE_NAME}/config.env"
+          APP_DIR="/opt/${PACKAGE_NAME}"
+
+          # Create symlink
+          ln -sf "${CONFIG_FILE}" "${APP_DIR}/.env"
+
+          # Make executable
+          chmod +x "${APP_DIR}/essl-agent"
+
+          # Reload systemd
+          if [ -d /run/systemd/system ]; then
+              systemctl daemon-reload || true
+              echo "✅ ${PACKAGE_NAME} installed successfully"
+              echo ""
+              echo "Configuration: ${CONFIG_FILE}"
+              echo "Edit config: sudo nano ${CONFIG_FILE}"
+              echo ""
+              echo "Start service: sudo systemctl start ${PACKAGE_NAME}"
+              echo "Enable on boot: sudo systemctl enable ${PACKAGE_NAME}"
+          fi
+
+          exit 0
+          POSTINST
+
+          chmod +x "${DEB_DIR}/DEBIAN/postinst"
+
+          # Create prerm script
+          cat > "${DEB_DIR}/DEBIAN/prerm" << 'PRERM'
+          #!/bin/bash
+          set -e
+
+          PACKAGE_NAME="essl-agent"
+
+          if [ -d /run/systemd/system ]; then
+              systemctl stop ${PACKAGE_NAME} 2>/dev/null || true
+              systemctl disable ${PACKAGE_NAME} 2>/dev/null || true
+          fi
+
+          exit 0
+          PRERM
+
+          chmod +x "${DEB_DIR}/DEBIAN/prerm"
+
+          # Create systemd service
+          cat > "${DEB_DIR}/lib/systemd/system/${PACKAGE_NAME}.service" << 'SERVICE'
+          [Unit]
+          Description=ESSL Agent - Biometric Device Management
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=root
+          WorkingDirectory=/opt/essl-agent
+          EnvironmentFile=/etc/essl-agent/config.env
+          ExecStart=/opt/essl-agent/essl-agent
+          Restart=always
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+          SERVICE
+
+          # Create README
+          cat > "${DEB_DIR}/usr/share/doc/${PACKAGE_NAME}/README" << 'README'
+          ESSL Agent
+
+          Installation:
+            sudo dpkg -i essl-agent_*.deb
+
+          Configuration:
+            sudo nano /etc/essl-agent/config.env
+
+          Service Management:
+            sudo systemctl start essl-agent
+            sudo systemctl stop essl-agent
+            sudo systemctl status essl-agent
+            sudo systemctl enable essl-agent  # Auto-start on boot
+
+          View Logs:
+            sudo journalctl -u essl-agent -f
+
+          Manual Run (testing):
+            cd /opt/essl-agent
+            sudo ./essl-agent
+          README
+
+          # Fix permissions
+          find "${DEB_DIR}" -type d -exec chmod 755 {} \;
+          find "${DEB_DIR}" -type f -exec chmod 644 {} \;
+          chmod +x "${DEB_DIR}/opt/${PACKAGE_NAME}/essl-agent"
+          chmod +x "${DEB_DIR}/DEBIAN/postinst"
+          chmod +x "${DEB_DIR}/DEBIAN/prerm"
+
+          # Build .deb
+          dpkg-deb --build "${DEB_DIR}"
+
+          # Move to artifacts
+          mkdir -p artifacts
+          mv "deb_build/${PACKAGE_NAME}_${VERSION}.deb" "artifacts/"
+
+          # Also keep plain executable
+          cp -r dist/essl-agent artifacts/essl-agent-linux
+
+      - name: Upload .deb package
+        uses: actions/upload-artifact@v4
+        with:
+          name: essl-agent-deb
+          path: artifacts/*.deb
+          retention-days: 30
+
+      - name: Upload Linux executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: essl-agent-linux
+          path: artifacts/essl-agent-linux
+          retention-days: 30
+
+  # ==========================================================================
+  # Windows Build - Creates .exe
+  # ==========================================================================
+  build-windows:
+    name: Build Windows (.exe)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
-      
+
       - name: Build executable
         run: |
           python -m PyInstaller essl-agent.spec --clean
-      
-      - name: Rename output folder
-        shell: bash
+
+      - name: Prepare distribution
         run: |
-          mv dist/essl-agent dist/${{ matrix.output_name }}
-      
-      - name: Upload artifact (Unix)
-        if: runner.os != 'Windows'
+          mkdir artifacts
+          xcopy dist\essl-agent artifacts\essl-agent-windows\ /E /I /Y
+        shell: cmd
+
+      - name: Upload Windows executable
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.output_name }}
-          path: dist/${{ matrix.output_name }}
+          name: essl-agent-windows
+          path: artifacts/essl-agent-windows
           retention-days: 30
-      
-      - name: Upload artifact (Windows)
-        if: runner.os == 'Windows'
+
+  # ==========================================================================
+  # macOS Build - Creates macOS binary
+  # ==========================================================================
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable
+        run: |
+          python -m PyInstaller essl-agent.spec --clean
+
+      - name: Strip debug symbols
+        run: |
+          strip dist/essl-agent/essl-agent || true
+
+      - name: Prepare distribution
+        run: |
+          mkdir -p artifacts
+          cp -r dist/essl-agent artifacts/essl-agent-macos
+
+      - name: Upload macOS executable
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.output_name }}
-          path: dist/${{ matrix.output_name }}
+          name: essl-agent-macos
+          path: artifacts/essl-agent-macos
           retention-days: 30
+
+  # ==========================================================================
+  # Create Release (only on tag)
+  # ==========================================================================
+  create-release:
+    name: Create Release
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            essl-agent-deb/*.deb
+            essl-agent-linux/**/*
+            essl-agent-windows/**/*
+            essl-agent-macos/**/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

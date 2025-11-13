@@ -98,11 +98,7 @@ def load_environment():
     
     Returns:
         bool: True if successful, False otherwise
-    
-    The dotenv library:
-    - Reads key=value pairs from .env file
-    - Sets them as environment variables (os.environ)
-    - Doesn't override existing environment variables
+
     """
     success, message, env_path = check_env_file()
     

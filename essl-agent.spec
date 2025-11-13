@@ -33,7 +33,7 @@ a = Analysis(
     binaries=[],
     datas=[
         # Include app directory - will be compiled to .pyc
-        ('app', 'app'),
+        ('obf_app', 'app'),
         ('data.json', '.'),
         ('.env.template', '.'),
     ],

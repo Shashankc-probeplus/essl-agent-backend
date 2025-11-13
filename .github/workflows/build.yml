@@ -205,7 +205,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
 
-          aws s3 cp essl-agent-linux/   s3://your-bucket/essl-agent/$VERSION/linux/   --recursive
-          aws s3 cp essl-agent-windows/ s3://your-bucket/essl-agent/$VERSION/windows/ --recursive
-          aws s3 cp essl-agent-macos/   s3://your-bucket/essl-agent/$VERSION/macos/   --recursive
-          aws s3 cp essl-agent-deb/     s3://your-bucket/essl-agent/$VERSION/deb/     --recursive
+          aws s3 cp essl-agent-linux/ s3://stock-management-system/essl-agent/$VERSION/linux/ --recursive
+          aws s3 cp essl-agent-windows/ s3://stock-management-system/essl-agent/$VERSION/windows/ --recursive
+          aws s3 cp essl-agent-macos/ s3://stock-management-system/essl-agent/$VERSION/macos/ --recursive
+          aws s3 cp essl-agent-deb/ s3://stock-management-system/essl-agent/$VERSION/deb/ --recursive
